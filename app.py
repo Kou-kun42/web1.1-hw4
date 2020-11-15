@@ -50,7 +50,9 @@ def home():
     """Displays the homepage with forms for current or historical data."""
     context = {
         'min_date': (datetime.now() - timedelta(days=5)),
-        'max_date': datetime.now()
+        'max_date': datetime.now(),
+        'future_start': (datetime.now() + timedelta(days=1)),
+        'future_end': (datetime.now() + timedelta(days=4))
     }
     return render_template('home.html', **context)
 
@@ -127,6 +129,7 @@ def historical_results():
     """Displays historical weather forecast for a given day."""
     city = request.args.get("city")
     date = request.args.get("date")
+    print(date)
     units = request.args.get("units")
     date_obj = datetime.strptime(date, '%Y-%m-%d')
     date_in_seconds = date_obj.strftime('%s')
@@ -171,6 +174,75 @@ def historical_results():
 
     return render_template('historical_results.html', **context)
 
+# Gets the average temp for a day
+def get_avg_temp(results):
+    temps = []
+    for obj in results:
+        temps.append(obj["main"]["temp"])
+    return sum(temps) / len(temps)
+
+# Gets the average temp for a day
+def get_min_ftemp(results):
+    min_temp = results[0]["main"]["temp_min"]
+    for obj in results:
+        if obj["main"]["temp_min"] < min_temp:
+            min_temp = obj["main"]["temp_min"]
+    return min_temp
+
+# Gets the average temp for a day
+def get_max_ftemp(results):
+    max_temp = results[0]["main"]["temp_max"]
+    for obj in results:
+        if obj["main"]["temp_max"] > max_temp:
+            max_temp = obj["main"]["temp_max"]
+    return max_temp
+
+# I tried to do the 4 day forecast but it seems we need a paid account api key.
+# This is the code that I think should work but I have no way of testing it.
+@app.route("/forecast_results")
+def forecast_results():
+    """Displays future weather forecast for a given day."""
+
+    city = request.args.get("city")
+    date = request.args.get("date")
+    units = request.args.get("units")
+    date_obj = datetime.strptime(date, '%Y-%m-%d')
+    dt = date_obj.strftime('%s')
+
+    latitude, longitude = get_lat_lon(city)
+
+    url = 'http://api.openweathermap.org/data/2.5/forecast/hourly'
+    params = {
+        "appid": API_KEY,
+        "lat": latitude,
+        "lon": longitude,
+        "units": units,
+    }
+
+    result_json = requests.get(url, params=params).json()
+    
+    pp.pprint(result_json)
+
+    # Find the right day from the results
+    day_list = []
+    for day in result_json["list"]:
+        if date in day["dt_txt"]:
+            day_list.append(day)
+
+    context = {
+        'city': city,
+        'date': date_obj,
+        'lat': latitude,
+        'lon': longitude,
+        'units': units,
+        'units_letter': get_letter_for_units(units), # should be 'C', 'F', or 'K'
+        'description': day_list[0]["weather"][0]["description"],
+        'temp': get_avg_temp(day_list),
+        'min_temp': get_min_ftemp(day_list),
+        'max_temp': get_max_ftemp(day_list)
+    }
+
+    return render_template('forecast_results.html', **context)
 
 ################################################################################
 ## IMAGES
